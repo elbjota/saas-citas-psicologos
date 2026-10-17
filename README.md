@@ -1,11 +1,11 @@
 # SaaS de citas para psicólogos independientes
 
-**Agenda, pacientes, cobros y reportes con privacidad para datos de salud mental · 2026**
+**Agenda, pacientes, cobros y reportes, cuidando la privacidad de datos de salud mental · 2026**
 
-En este SaaS multi-consultorio:
-- Cada psicóloga tiene una **página pública editable**.
-- Sus pacientes **reservan sin crear cuenta**.
-- Ella gestiona agenda, pacientes, pagos con comprobante, mensajes de WhatsApp y reportes desde el celular.
+Es una aplicación web por suscripción (SaaS) que usan varios consultorios a la vez, cada uno con sus datos separados:
+- Cada psicóloga tiene una **página pública que ella misma edita**.
+- Sus pacientes **reservan cita sin crear una cuenta**.
+- Ella maneja su agenda, pacientes, pagos con comprobante, mensajes de WhatsApp y reportes desde el celular.
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
@@ -23,22 +23,22 @@ En este SaaS multi-consultorio:
 
 ## El problema
 
-Las psicólogas independientes gestionan su consulta con WhatsApp, cuadernos y memoria:
-- Las citas y reprogramaciones se conversan por chat.
+Muchas psicólogas independientes llevan su consulta con WhatsApp, cuadernos y memoria:
+- Las citas y los cambios de horario se conversan por chat.
 - Los comprobantes de pago llegan sueltos.
-- No hay un registro claro de quién debe qué.
-- Los datos de los pacientes quedan sin ninguna protección.
+- No queda claro quién pagó y quién debe.
+- Los datos de los pacientes no tienen ninguna protección.
 
 ## La solución
 
 | Para | Qué hace |
 |---|---|
-| **El paciente** | Página de la profesional (enfoque, temas, servicios, formación, ubicación, preguntas frecuentes) y reserva en 4 pasos **sin cuenta** |
-| **La psicóloga** | Confirma o rechaza solicitudes y ve su agenda del día y de la semana. También: «programar siguiente cita», «pasar a virtual» y reprogramación con enlace de un solo uso para el paciente |
-| **Los cobros** | Efectivo o comprobante, con aprobación o rechazo; pendientes de cobro y comprobantes por revisar |
-| **La comunicación** | Mensajes de WhatsApp listos (`wa.me`) con plantillas editables, enviados desde su propio número |
-| **Los números** | Reportes por periodo: ingresos, atendidas, inasistencias y cobros por método |
-| **La plataforma** | Super Admin con consultorios, planes, auditoría y suspensión de acceso, aplicados por la base de datos |
+| **El paciente** | Ve la página de la profesional (enfoque, temas, servicios, formación, ubicación y preguntas frecuentes) y reserva en 4 pasos **sin crear cuenta** |
+| **La psicóloga** | Acepta o rechaza solicitudes y ve su agenda del día y de la semana. También puede programar la siguiente cita, pasar una cita a virtual o proponer otro horario con un enlace que el paciente usa una sola vez |
+| **Los cobros** | Pago en efectivo o con comprobante, que ella aprueba o rechaza. Ve qué falta cobrar y qué comprobantes faltan revisar |
+| **La comunicación** | Mensajes de WhatsApp ya escritos, con plantillas que ella puede cambiar, enviados desde su propio número |
+| **Los números** | Reportes por periodo: ingresos, citas atendidas, inasistencias y cobros por método de pago |
+| **La plataforma** | Un panel de administrador general para ver consultorios y planes, revisar el historial de acciones y suspender el acceso. Estas reglas las aplica la propia base de datos |
 
 ## Capturas
 
@@ -54,55 +54,54 @@ Las psicólogas independientes gestionan su consulta con WhatsApp, cuadernos y m
 | **Reportes** | **Plantillas de WhatsApp** |
 | ![Reportes](img/14-reportes.png) | ![Mensajes](img/17-mensajes-whatsapp.png) |
 
-## Arquitectura
+## Cómo está armado
 
 ![Arquitectura](img/arquitectura.png)
 
-**Decisiones clave:**
-- **Aislamiento en dos capas:** la aplicación y PostgreSQL con RLS, más 8 claves foráneas compuestas con `organization_id`. Se verificó con 17 pruebas contra una base real.
-- **Minimización:** no se guardan historia clínica, notas ni diagnósticos; solo lo necesario para agendar y cobrar.
-- **Archivos privados:** los comprobantes se validan por su firma binaria (SVG prohibido) y se sirven con URLs firmadas de 5 a 10 minutos.
-- **Supabase autoalojado** en Docker Compose detrás de Caddy, el único servicio que expone puertos.
+**Decisiones principales:**
+- **Datos separados por consultorio, con doble control:** la aplicación filtra los datos de cada consultorio y, además, la base de datos PostgreSQL lo vuelve a revisar con RLS (reglas dentro de la base de datos que hacen que cada consultorio vea solo lo suyo). Lo comprobé con 17 pruebas en una base de datos real.
+- **Guardar solo lo necesario (minimización de datos):** no se guardan historia clínica, notas ni diagnósticos. Solo lo que hace falta para agendar y cobrar. Va en la línea de la Ley 29733 de protección de datos personales.
+- **Comprobantes privados:** al subir un comprobante se revisa que el archivo sea de verdad del tipo permitido y no otro archivo disfrazado. Para verlo se usan enlaces que caducan en pocos minutos.
+- **Servidor propio:** todo corre en contenedores Docker (paquetes que llevan cada programa listo para funcionar) en un servidor propio. Caddy es la única puerta de entrada desde internet y pone HTTPS automático (conexión cifrada).
 
-## Seguridad: un fallo real encontrado y corregido
+## Seguridad: un fallo real que encontré y corregí
 
-Durante las pruebas adversariales descubrí un problema:
-- **El fallo:** una función `SECURITY DEFINER` sin `pg_temp` en su `search_path` permitía **saltarse RLS y escalar a Super Admin**.
-- **La corrección:** se arregló y ahora una prueba de regresión falla si cualquier función queda sin esa protección.
+- **El fallo:** en una revisión de seguridad encontré que una función de la base de datos estaba mal configurada y podía permitir que un usuario se diera permisos de administrador (esto se llama escalada de privilegios).
+- **La corrección:** lo corregí y agregué una prueba automática para que no vuelva a pasar.
 
 Además:
-- Privilegios recortados (`TRUNCATE`, `TRIGGER`, `REFERENCES`, `MAINTAIN`) y **21/21 pruebas adversariales**; rol `app_user` y PostgREST cerrado.
-- Logs con datos personales y secretos redactados (33 pruebas).
-- Medición real del límite de autenticación, documentada como riesgo a reforzar.
-- Modelo de amenazas basado en OWASP, clasificación de datos, retención programada y pruebas de accesibilidad con axe-core.
+- Quité a la aplicación los permisos de la base de datos que no necesitaba. Lo comprobé con **21 de 21 pruebas de ataque a permisos** que pasan.
+- Los registros del sistema (logs) ocultan datos personales y contraseñas. Hay 33 pruebas que lo revisan.
+- Medí que el límite de intentos de inicio de sesión era muy alto y lo dejé documentado para reforzarlo.
+- Dejé un análisis de riesgos de seguridad documentado, una clasificación de qué datos son sensibles, borrado programado de datos viejos y pruebas automáticas de accesibilidad.
 
 ## Calidad
 
-- **3116 pruebas Vitest** (unitarias e integración) en el último registro.
-- **436 pruebas E2E con Playwright** en 58 specs, que recorren los flujos reales de la psicóloga y del paciente.
-- **87 migraciones** versionadas y **177 commits**.
+- **3116 pruebas automáticas con Vitest** (revisan funciones por separado y en conjunto) en el último registro.
+- **436 pruebas E2E con Playwright:** un robot que usa la app como una persona y recorre lo que hacen la psicóloga y el paciente.
+- **87 migraciones** (cada cambio a la base de datos queda guardado por versiones) y **177 commits**.
 
 ## Estado
 
-- ✅ **MVP completo y probado** en un **ensayo de producción en local**: los mismos contenedores que irán al VPS, con HTTPS, backups y restauración.
+- ✅ **Primera versión completa y probada** en un **ensayo de producción en mi computadora**: los mismos contenedores que irán al servidor (VPS, un servidor alquilado en internet), con HTTPS, copias de seguridad (backups) y su restauración.
 - ⏳ **Siguiente paso:**
-  - despliegue en el VPS, dominio y certificados reales;
-  - correo transaccional;
-  - la política de backups antes de recibir datos reales.
-- 🚫 **Fuera del MVP a propósito:** pasarela de pago, recordatorios automáticos y autogestión del paciente.
+  - subirlo al VPS, con dominio y certificados reales;
+  - correos automáticos (confirmaciones y avisos);
+  - definir la política de copias de seguridad antes de recibir datos reales.
+- 🚫 **Lo dejé fuera a propósito en esta versión:** pagos en línea, recordatorios automáticos y que el paciente gestione sus propias citas.
 
 ## Mi rol
 
-Proyecto propio de principio a fin:
-- Definí el producto con una psicóloga piloto.
-- Diseñé el modelo de datos, la arquitectura y la estrategia de privacidad.
+Es un proyecto propio de principio a fin:
+- Definí qué necesitaba el producto junto con una psicóloga piloto.
+- Diseñé cómo se guardan los datos, cómo se conectan las partes y cómo se protege la privacidad.
 - Desarrollé la aplicación con apoyo de asistentes de IA.
-- Escribí las pruebas: unitarias, de integración, adversariales y E2E.
-- Preparé la infraestructura autoalojada.
+- Preparé las pruebas: automáticas, de ataque a permisos y E2E.
+- Preparé el servidor propio con Docker.
 
 ---
 
-> 🔒 **Repositorio vitrina:** no se publican el código fuente, los datos reales ni los secretos de infraestructura.
+> 🔒 **Repositorio de muestra:** no se publican el código fuente, los datos reales ni las claves del servidor.
 >
 > Las capturas son de una copia local con la cuenta de demostración «Ps. Mariana Salazar Rivas». La persona, los pacientes y los teléfonos son ficticios; la foto es de Unsplash (Christina @ wocintechchat).
 
